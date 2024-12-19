@@ -1,0 +1,18 @@
+{
+    "name": "theincubator/php-rest-api-lite",
+    "description": "A lite PHP framework to buid rest APIs.",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Theincubator\\PhpRestApiLite\\": "App/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Charan Putrevu",
+            "email": "charan1224@gmail.com"
+        }
+    ],
+    "require": {}
+}
