@@ -1,21 +1,22 @@
 <?php
-
 /*
- * Copyrights BloodInfo@2022
- * This is copyrighted software for public service distribution. Any illegal software use and manipulation will be prosecuted.  * 
+ * PHP Rest API Lite is free script to jumpstart deveoping REST APIs with JSON as data exchange format. Uses JWT for basic security. You can manipulate, extend to suit your uses
+ * and also contribute.
+ * 
+ * Put forth by: The Incubator.
  */
-error_reporting(E_ERROR);
-ini_set('display_errors', 1);
 require_once 'vendor/autoload.php';
-
-
 
 use Theincubator\PhpRestApiLite\Helpers\Settings;
 use Theincubator\PhpRestApiLite\Controller\UserController;
 use Theincubator\PhpRestApiLite\Helpers\Routes;
 use Theincubator\PhpRestApiLite\Helpers\JWT;
+use Theincubator\PhpRestApiLite\Controller;
+use Theincubator\PhpRestApiLite\TestController;
+
 /**
- * Main class to process APIs
+ * Entry point for rest APIs. Route and token verification are done here.
+ * If verification is successful respective Controller is invoked and response is sent back.
  *
  * @author charanputrevu
  */
@@ -90,23 +91,23 @@ class WebService {
     public function __construct() {
         $settings = new Settings();
         $this->extractHeaders();
-        $this->setRouteDetails();
+        $this->setRouteDetails($settings->getProperty('endpoint'));
         $this->checkRoute();
-        if ($this->isAuthenticated && !$settings->getProperty('devMode')) {
+        if ($this->isAuthenticated && !$settings->getProperty('useJwt')) {
             $this->verifyToken();
         }
         $this->extractData();
         $this->executeController();
         $this->sendResponse();
     }
-    
+
     /**
      * Extract the headers from the request.
      */
     private function extractHeaders() {
         $this->headers = getallheaders();
     }
-    
+
     /**
      * Verify the JWT token received in the headers.
      */
@@ -120,20 +121,20 @@ class WebService {
             $this->sendResponse();
         }
     }
-    
+
     /**
      * Extract and set route details.
      */
-    private function setRouteDetails() {
-        $uriParts = explode('WebService/', $_SERVER['REQUEST_URI']);
+    private function setRouteDetails(string $endpoint) {
+        $uriParts = explode($endpoint.'/', $_SERVER['REDIRECT_URL']);
         $routeParts = explode('/', $uriParts[1]);
         $this->route = array_shift($routeParts).'/'.array_shift($routeParts);
         $this->routeParams = $routeParts;
         $this->requestMethod = $_SERVER['REQUEST_METHOD'];
     }
-    
+
     /**
-     * Check route is valid or not
+     * Check route is valid or not.
      */
     private function checkRoute() {
         $routes = new Routes();
@@ -145,14 +146,14 @@ class WebService {
             $this->sendResponse();
         }
     }
-    
+
     /**
      * Extract data from the request.
      */
     private function extractData() {
-        $this->get = $_GET;
+        $this->get = $this->sanitizeArray($_GET);
         try {
-            $this->data = json_decode(file_get_contents('php://input'), true);
+            $this->data = $this->sanitizeArray(json_decode(file_get_contents('php://input'), true));
         } catch (Exception $ex) {
             $this->httpCode = 400;
             $this->error = $ex->getMessage();
@@ -160,24 +161,59 @@ class WebService {
     }
     
     /**
+     * Sanitize data.
+     * @param mixed $data
+     * @return mixed
+     */
+    private function sanitizeData(mixed $data): mixed {
+        if (is_string($data)) {
+            return htmlentities($data);
+        }
+    }
+    
+    /**
+     * Sanitize a multidimensional array recursively.
+     *
+     * @param array $data The input array to sanitize.
+     * @param callable|null $callback Optional callback for sanitization. Defaults to htmlentities.
+     * @return array The sanitized array.
+     */
+    private function sanitizeArray(array $data): array {
+        foreach ($data as $key => $value) {
+            if (is_array($value)) {
+                $data[$key] = sanitizeArray($value);
+            } else {
+                $data[$key] = $this->sanitizeData($value);
+            }
+        }
+        return $data;
+    }
+
+    /**
      * Execute the required method from the controller.
      */
     private function executeController() {
         $routeParts = explode('/', $this->route);
         $method = array_pop($routeParts);
         $data = array();
-        $controller = ucfirst(array_pop($routeParts)).'Controller';
+        $controller = 'Theincubator\\PhpRestApiLite\\Controllers\\'.ucfirst(array_pop($routeParts)).'Controller';
         try {
             $controllerClass = new $controller();
+            if (!$controllerClass instanceof Controller) {
+                throw new Exception('Invalid Controller. Please check if class '.$controllerClass.' extends Theincubator\PhpRestApiLite\Controller', 500);
+            }
             $controllerClass->setGetData($this->get);
-            $controllerClass->setPostData($this->data);
+            if (!empty($this->data)) {
+                $controllerClass->setPostData($this->data);
+            }
             if (empty($this->routeParams)) {
                 $data = $controllerClass->$method();
             } else {
                 $data = $controllerClass->$method(...$this->routeParams);
             }
-            $this->payload['data'] = $data['data'];
-            $this->httpCode = $data['httpCode'];
+            $this->payload['data'] = $data;
+            $this->payload['success'] = $controllerClass->isSuccess();
+            $this->httpCode = $controllerClass->getHttpCode();
         } catch (Exception $ex) {
             $this->httpCode = $ex->getCode();
             $this->error = $ex->getMessage();
@@ -185,13 +221,12 @@ class WebService {
         }
         
     }
-    
+
     /**
-     * Send a response after processing the request
+     * Send back response after processing the request.
      */
     private function sendResponse() {
         http_response_code($this->httpCode);
-        $this->payload['success'] = true;
         if ($this->error !== '') {
             $this->payload['message'] = $this->error;
             $this->payload['success'] = false;
