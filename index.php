@@ -8,11 +8,10 @@
 require_once 'vendor/autoload.php';
 
 use Theincubator\PhpRestApiLite\Helpers\Settings;
-use Theincubator\PhpRestApiLite\Controller\UserController;
+use Theincubator\PhpRestApiLite\Controllers\UserController;
 use Theincubator\PhpRestApiLite\Helpers\Routes;
 use Theincubator\PhpRestApiLite\Helpers\JWT;
 use Theincubator\PhpRestApiLite\Controller;
-use Theincubator\PhpRestApiLite\TestController;
 
 /**
  * Entry point for rest APIs. Route and token verification are done here.
@@ -217,6 +216,10 @@ class WebService {
         } catch (Exception $ex) {
             $this->httpCode = $ex->getCode();
             $this->error = $ex->getMessage();
+            if ($ex->getMessage() !== '') {
+                $this->payload['message'] = $ex->getMessage();
+                $this->payload['success'] = false;
+            }
             $this->sendResponse();
         }
         
@@ -227,10 +230,6 @@ class WebService {
      */
     private function sendResponse() {
         http_response_code($this->httpCode);
-        if ($this->error !== '') {
-            $this->payload['message'] = $this->error;
-            $this->payload['success'] = false;
-        }
         header("Content-Type: application/json; charset=utf-8");
         echo json_encode($this->payload);
         die();

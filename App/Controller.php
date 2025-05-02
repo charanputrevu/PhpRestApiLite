@@ -10,11 +10,6 @@ use Theincubator\PhpRestApiLite\Helpers\Enums\HttpResponseCode;
  * @author charanputrevu
  */
 class Controller {
-    protected array $data = [
-        'httpCode' => 200,
-        'data' => array()
-    ];
-    
     /**
      * Has JSON data sent by POST request..
      * @var array
